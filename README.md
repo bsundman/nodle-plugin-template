@@ -56,7 +56,7 @@ Each node type needs a factory that implements `NodeFactory`:
 ```rust
 impl NodeFactory for HelloWorldNodeFactory {
     fn metadata(&self) -> NodeMetadata { ... }
-    fn create_node(&self, position: Pos2) -> Box<dyn PluginNode> { ... }
+    fn create_node(&self, position: Pos2) -> PluginNodeHandle { ... }
 }
 ```
 
@@ -69,7 +69,8 @@ impl PluginNode for HelloWorldNode {
     fn id(&self) -> String { ... }
     fn position(&self) -> Pos2 { ... }
     fn set_position(&mut self, position: Pos2) { ... }
-    fn render_parameters(&mut self, ui: &mut Ui) -> Vec<ParameterChange> { ... }
+    fn get_parameter_ui(&self) -> ParameterUI { ... }
+    fn handle_ui_action(&mut self, action: UIAction) -> Vec<ParameterChange> { ... }
     fn get_parameter(&self, name: &str) -> Option<NodeData> { ... }
     fn set_parameter(&mut self, name: &str, value: NodeData) { ... }
     fn process(&mut self, inputs: &HashMap<String, NodeData>) -> HashMap<String, NodeData> { ... }
@@ -78,27 +79,42 @@ impl PluginNode for HelloWorldNode {
 
 ### 4. Export Functions
 
-The plugin must export these C functions:
+**IMPORTANT: Use Safe Wrapper Types**
+
+The plugin must export these C functions using safe wrapper types:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn create_plugin() -> *mut dyn NodePlugin {
-    Box::into_raw(Box::new(ExamplePlugin))
+pub extern "C" fn create_plugin() -> PluginHandle {
+    PluginHandle::new(Box::new(ExamplePlugin))
 }
 
 #[no_mangle]
-pub extern "C" fn destroy_plugin(plugin: *mut dyn NodePlugin) {
-    unsafe { let _ = Box::from_raw(plugin); }
+pub extern "C" fn destroy_plugin(handle: PluginHandle) {
+    let _ = unsafe { handle.into_plugin() };
 }
 ```
+
+**⚠️ NEVER use the old pattern that returns trait objects directly - it causes crashes!**
 
 ## Development Tips
 
 1. **Use the SDK**: Always depend on `nodle-plugin-sdk` for interfaces
-2. **Node Metadata**: Provide rich metadata for better integration
-3. **Workspace Compatibility**: Specify which workspaces support your nodes
-4. **Error Handling**: Use `PluginError` for consistent error reporting
-5. **Resource Management**: Clean up properly in `on_unload()`
+2. **Use Safe Wrappers**: Always use `PluginHandle` and `PluginNodeHandle` - never pass trait objects directly
+3. **Data-Driven UI**: Use `get_parameter_ui()` and `handle_ui_action()` instead of direct egui rendering
+4. **Node Metadata**: Provide rich metadata for better integration
+5. **Workspace Compatibility**: Specify which workspaces support your nodes
+6. **Error Handling**: Use `PluginError` for consistent error reporting
+7. **Resource Management**: Clean up properly in `on_unload()`
+
+## ⚠️ Critical Safety Requirements
+
+**READ THE PLUGIN_DEVELOPMENT.md FILE** for detailed safety requirements. Key points:
+
+- Never return `Box<dyn PluginNode>` from `create_node()` - use `PluginNodeHandle`
+- Never export `extern "C"` functions that return trait objects directly
+- Always use the data-driven UI pattern with `get_parameter_ui()` and `handle_ui_action()`
+- Passing trait objects through FFI boundaries causes undefined behavior and crashes
 
 ## Customization
 

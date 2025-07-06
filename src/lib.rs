@@ -56,8 +56,8 @@ impl NodeFactory for HelloWorldNodeFactory {
         ])
     }
     
-    fn create_node(&self, position: Pos2) -> Box<dyn PluginNode> {
-        Box::new(HelloWorldNode::new(position))
+    fn create_node(&self, position: Pos2) -> PluginNodeHandle {
+        PluginNodeHandle::new(Box::new(HelloWorldNode::new(position)))
     }
 }
 
@@ -91,19 +91,40 @@ impl PluginNode for HelloWorldNode {
         self.position = position;
     }
     
-    fn render_parameters(&mut self, ui: &mut Ui) -> Vec<ParameterChange> {
+    fn get_parameter_ui(&self) -> ParameterUI {
+        let mut elements = Vec::new();
+        
+        elements.push(UIElement::Heading("Hello World Node".to_string()));
+        elements.push(UIElement::Separator);
+        
+        elements.push(UIElement::TextEdit {
+            label: "Message".to_string(),
+            value: self.message.clone(),
+            parameter_name: "message".to_string(),
+        });
+        
+        ParameterUI { elements }
+    }
+    
+    fn handle_ui_action(&mut self, action: UIAction) -> Vec<ParameterChange> {
         let mut changes = Vec::new();
         
-        ui.label("Hello World Node");
-        ui.separator();
-        
-        let mut new_message = self.message.clone();
-        if ui.text_edit_singleline(&mut new_message).changed() {
-            self.message = new_message.clone();
-            changes.push(ParameterChange {
-                parameter: "message".to_string(),
-                value: NodeData::String(new_message),
-            });
+        match action {
+            UIAction::ParameterChanged { parameter, value } => {
+                match parameter.as_str() {
+                    "message" => {
+                        if let Some(msg) = value.as_string() {
+                            self.message = msg.to_string();
+                            changes.push(ParameterChange {
+                                parameter: "message".to_string(),
+                                value: NodeData::String(self.message.clone()),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
         }
         
         changes
@@ -157,8 +178,8 @@ impl NodeFactory for MathAddNodeFactory {
         ])
     }
     
-    fn create_node(&self, position: Pos2) -> Box<dyn PluginNode> {
-        Box::new(MathAddNode::new(position))
+    fn create_node(&self, position: Pos2) -> PluginNodeHandle {
+        PluginNodeHandle::new(Box::new(MathAddNode::new(position)))
     }
 }
 
@@ -194,31 +215,62 @@ impl PluginNode for MathAddNode {
         self.position = position;
     }
     
-    fn render_parameters(&mut self, ui: &mut Ui) -> Vec<ParameterChange> {
+    fn get_parameter_ui(&self) -> ParameterUI {
+        let mut elements = Vec::new();
+        
+        elements.push(UIElement::Heading("Math Add Node (Plugin)".to_string()));
+        elements.push(UIElement::Separator);
+        
+        elements.push(UIElement::Slider {
+            label: "A".to_string(),
+            value: self.a,
+            min: -100.0,
+            max: 100.0,
+            parameter_name: "a".to_string(),
+        });
+        
+        elements.push(UIElement::Slider {
+            label: "B".to_string(),
+            value: self.b,
+            min: -100.0,
+            max: 100.0,
+            parameter_name: "b".to_string(),
+        });
+        
+        elements.push(UIElement::Label(format!("Result: {}", self.a + self.b)));
+        
+        ParameterUI { elements }
+    }
+    
+    fn handle_ui_action(&mut self, action: UIAction) -> Vec<ParameterChange> {
         let mut changes = Vec::new();
         
-        ui.label("Math Add Node (Plugin)");
-        ui.separator();
-        
-        let mut new_a = self.a;
-        if ui.add(egui::DragValue::new(&mut new_a).prefix("A: ")).changed() {
-            self.a = new_a;
-            changes.push(ParameterChange {
-                parameter: "a".to_string(),
-                value: NodeData::Float(new_a),
-            });
+        match action {
+            UIAction::ParameterChanged { parameter, value } => {
+                match parameter.as_str() {
+                    "a" => {
+                        if let Some(val) = value.as_float() {
+                            self.a = val;
+                            changes.push(ParameterChange {
+                                parameter: "a".to_string(),
+                                value: NodeData::Float(val),
+                            });
+                        }
+                    }
+                    "b" => {
+                        if let Some(val) = value.as_float() {
+                            self.b = val;
+                            changes.push(ParameterChange {
+                                parameter: "b".to_string(),
+                                value: NodeData::Float(val),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
         }
-        
-        let mut new_b = self.b;
-        if ui.add(egui::DragValue::new(&mut new_b).prefix("B: ")).changed() {
-            self.b = new_b;
-            changes.push(ParameterChange {
-                parameter: "b".to_string(),
-                value: NodeData::Float(new_b),
-            });
-        }
-        
-        ui.label(format!("Result: {}", self.a + self.b));
         
         changes
     }
@@ -272,16 +324,16 @@ fn uuid() -> String {
     format!("{:x}", timestamp)
 }
 
-/// Plugin entry point - must be exported with this exact signature
+/// Plugin entry point - MUST use PluginHandle for safe FFI transfer
+/// This avoids undefined behavior when passing trait objects through extern "C"
 #[no_mangle]
-pub extern "C" fn create_plugin() -> *mut dyn NodePlugin {
-    Box::into_raw(Box::new(ExamplePlugin))
+pub extern "C" fn create_plugin() -> PluginHandle {
+    PluginHandle::new(Box::new(ExamplePlugin))
 }
 
-/// Plugin cleanup - must be exported with this exact signature
+/// Plugin cleanup - MUST use PluginHandle for safe FFI transfer
 #[no_mangle]
-pub extern "C" fn destroy_plugin(plugin: *mut dyn NodePlugin) {
-    unsafe {
-        let _ = Box::from_raw(plugin);
-    }
+pub extern "C" fn destroy_plugin(handle: PluginHandle) {
+    // Plugin will be dropped when handle goes out of scope
+    let _ = unsafe { handle.into_plugin() };
 }

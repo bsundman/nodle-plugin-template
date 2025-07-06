@@ -8,5 +8,5 @@ description = "Template for creating plugins for Nodle node editor"
 crate-type = ["cdylib"]
 
 [dependencies]
-nodle-plugin-sdk = { git = "https://github.com/bsundman/nodle-plugin-sdk" }
-egui = "0.24"
+nodle-plugin-sdk = { path = "../nodle-plugin-sdk" }
+egui = "0.29"
