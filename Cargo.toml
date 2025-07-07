@@ -9,4 +9,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 nodle-plugin-sdk = { path = "../nodle-plugin-sdk" }
-egui = "0.29"
+egui = "0.31"
